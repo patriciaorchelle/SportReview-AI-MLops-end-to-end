@@ -1120,9 +1120,13 @@ def main():
     # Mode rapide : réduit le dataset pour tester rapidement
     if args.fast:
         print("MODE RAPIDE : dataset réduit à 5000 exemples")
-        train_df = train_df.groupby(COL_LABEL, group_keys=False).apply(
-            lambda x: x.sample(min(len(x), 1000), random_state=RANDOM_STATE)
-        ).reset_index(drop=True)
+        # Boucle explicite pour éviter le bug pandas 2.2+ où groupby().apply()
+        # + reset_index(drop=True) supprime la colonne de groupement (COL_LABEL)
+        samples = []
+        for _, group in train_df.groupby(COL_LABEL):
+            n = min(len(group), 1000)
+            samples.append(group.sample(n, random_state=RANDOM_STATE))
+        train_df = pd.concat(samples).reset_index(drop=True)
         test_df = test_df.sample(min(len(test_df), 1000), random_state=RANDOM_STATE)
 
     X_train = train_df[COL_TEXT]

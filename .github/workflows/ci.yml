@@ -97,7 +97,7 @@ jobs:
       - name: Prepare model for Docker
         run: |
           pip install scikit-learn pandas numpy mlflow fastapi pydantic \
-                      "uvicorn[standard]" prometheus-client requests
+                      "uvicorn[standard]" prometheus-client requests seaborn matplotlib
           pip install "datasets>=2.20.0,<3.0" --force-reinstall
           python data/load_data.py --max_samples 5000
           python spark/preprocess.py --no-spark
@@ -169,7 +169,7 @@ jobs:
       - name: Prepare model
         run: |
           pip install scikit-learn pandas numpy mlflow fastapi pydantic \
-                      "uvicorn[standard]" prometheus-client requests
+                      "uvicorn[standard]" prometheus-client requests seaborn matplotlib
           pip install "datasets>=2.20.0,<3.0" --force-reinstall
           python data/load_data.py --max_samples 5000
           python spark/preprocess.py --no-spark
