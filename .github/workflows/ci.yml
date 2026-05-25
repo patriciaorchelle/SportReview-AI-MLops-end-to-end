@@ -46,6 +46,7 @@ jobs:
           pip install scikit-learn pandas numpy xgboost gensim sentence-transformers \
                       shap mlflow fastapi "uvicorn[standard]" pydantic \
                       prometheus-client "evidently>=0.4.30,<0.5.0" requests \
+                      "datasets>=2.20.0,<3.0" \
                       pytest pytest-cov httpx
 
       # 4. Télécharge le dataset et crée les données
