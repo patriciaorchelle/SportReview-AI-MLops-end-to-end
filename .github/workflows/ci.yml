@@ -46,8 +46,11 @@ jobs:
           pip install scikit-learn pandas numpy xgboost gensim sentence-transformers \
                       shap mlflow fastapi "uvicorn[standard]" pydantic \
                       prometheus-client "evidently>=0.4.30,<0.5.0" requests \
-                      "datasets>=2.20.0,<3.0" seaborn matplotlib \
-                      pytest pytest-cov httpx
+                      seaborn matplotlib pytest pytest-cov httpx
+          # datasets installé en dernier avec --force-reinstall :
+          # sentence-transformers tire datasets>=4.x comme dépendance et l'upgraderait.
+          # --force-reinstall garantit qu'on reste sur <3.0 (requis par Amazon Reviews 2023)
+          pip install "datasets>=2.20.0,<3.0" --force-reinstall
 
       # 4. Télécharge le dataset et crée les données
       - name: Prepare data
@@ -94,7 +97,8 @@ jobs:
       - name: Prepare model for Docker
         run: |
           pip install scikit-learn pandas numpy mlflow fastapi pydantic \
-                      "uvicorn[standard]" prometheus-client requests datasets
+                      "uvicorn[standard]" prometheus-client requests
+          pip install "datasets>=2.20.0,<3.0" --force-reinstall
           python data/load_data.py --max_samples 5000
           python spark/preprocess.py --no-spark
           python src/train.py --models tfidf_lr --fast
@@ -165,7 +169,8 @@ jobs:
       - name: Prepare model
         run: |
           pip install scikit-learn pandas numpy mlflow fastapi pydantic \
-                      "uvicorn[standard]" prometheus-client requests datasets
+                      "uvicorn[standard]" prometheus-client requests
+          pip install "datasets>=2.20.0,<3.0" --force-reinstall
           python data/load_data.py --max_samples 5000
           python spark/preprocess.py --no-spark
           python src/train.py --models tfidf_lr --fast
