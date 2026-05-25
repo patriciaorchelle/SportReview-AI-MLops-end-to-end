@@ -80,8 +80,13 @@ def load_model():
         pipeline = pickle.load(f)
 
     # Charge la liste des classes
+    # classes.json contient {"classes": [...], "best_model": "..."} (format de train.py)
     with open(CLASSES_PATH, "r") as f:
-        classes = json.load(f)
+        classes_data = json.load(f)
+    if isinstance(classes_data, dict):
+        classes = classes_data["classes"]
+    else:
+        classes = classes_data  # compatibilité si c'est déjà une liste
 
     # Charge les métadonnées du modèle si disponibles
     metadata_path = os.path.join(os.path.dirname(MODEL_PATH), "metadata.json")
