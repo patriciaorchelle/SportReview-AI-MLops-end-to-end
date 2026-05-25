@@ -1,0 +1,9 @@
+[run]
+# train.py est un script d'entraînement exécuté séparément dans la CI
+# (step "Train model"). Ce n'est pas une librairie → exclu de la mesure.
+omit =
+    src/train.py
+
+[report]
+# Affiche uniquement les fichiers avec moins de 100% de couverture
+skip_covered = False
