@@ -1,0 +1,41 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# prometheus.yml — Configuration de la source de données Grafana
+#
+# Ce fichier dit à Grafana où trouver Prometheus pour récupérer les métriques.
+# Il est chargé AUTOMATIQUEMENT au démarrage de Grafana via le provisioning.
+#
+# Sans ce fichier, tu devrais configurer la source de données manuellement
+# dans l'interface Grafana à chaque redémarrage. Avec ce fichier, c'est
+# automatique dès que Grafana démarre via docker-compose.
+#
+# Emplacement attendu dans le container Grafana :
+#   /etc/grafana/provisioning/datasources/prometheus.yml
+# (configuré dans docker-compose.yml via les volumes)
+# ─────────────────────────────────────────────────────────────────────────────
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    # Type de source de données : Prometheus (format de métriques standard)
+    type: prometheus
+
+    # Accès "proxy" = Grafana lui-même fait les requêtes vers Prometheus
+    # (par opposition à "direct" où c'est le navigateur qui requête Prometheus)
+    access: proxy
+
+    # URL de Prometheus dans le réseau Docker interne
+    # "prometheus" = nom du service dans docker-compose.yml
+    # Dans Docker, les services se trouvent par leur nom (pas leur IP)
+    url: http://prometheus:9090
+
+    # true = cette source de données est utilisée par défaut dans tous les dashboards
+    isDefault: true
+
+    # Interval de scraping : correspond à ce qu'on a configuré dans prometheus.yml
+    # Grafana utilisera ce même intervalle pour rafraîchir les graphiques
+    jsonData:
+      timeInterval: "15s"
+
+    # editable = on peut modifier cette source depuis l'interface Grafana
+    editable: true

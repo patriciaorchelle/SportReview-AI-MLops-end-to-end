@@ -1,0 +1,72 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# hpa.yaml — HorizontalPodAutoscaler (scaling automatique)
+#
+# Le HPA surveille l'utilisation CPU des pods et ajuste automatiquement
+# le nombre de replicas selon la charge.
+#
+# Exemple :
+# - Trafic normal (nuit) : 2 pods actifs (minimum)
+# - Trafic fort (midi)   : Kubernetes lance automatiquement jusqu'à 10 pods
+# - Trafic normal        : Kubernetes réduit progressivement à 2 pods
+#
+# C'est ce qui rend une application scalable sans intervention manuelle.
+#
+# Appliquer  : kubectl apply -f k8s/hpa.yaml
+# Surveiller : kubectl get hpa
+# ─────────────────────────────────────────────────────────────────────────────
+
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+
+metadata:
+  name: sportreview-api-hpa
+  namespace: default
+
+spec:
+  # ── Cible du scaling ──────────────────────────────────────────────────────
+  # Le HPA scale le Deployment "sportreview-api"
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: sportreview-api
+
+  # ── Limites du nombre de replicas ─────────────────────────────────────────
+  minReplicas: 2    # jamais moins de 2 pods (haute disponibilité)
+  maxReplicas: 10   # jamais plus de 10 pods (contrôle des coûts)
+
+  # ── Métriques déclenchant le scaling ──────────────────────────────────────
+  metrics:
+    # Scale up si l'utilisation CPU moyenne dépasse 70%
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70   # 70% CPU → Kubernetes ajoute des pods
+
+    # Scale up si l'utilisation mémoire moyenne dépasse 80%
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+  # ── Comportement de scaling ───────────────────────────────────────────────
+  behavior:
+    scaleUp:
+      # Scale up rapide : peut ajouter jusqu'à 3 pods toutes les 60 secondes
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 3
+          periodSeconds: 60
+
+    scaleDown:
+      # Scale down prudent : attend 5 minutes avant de réduire
+      # → évite de supprimer des pods trop vite si le trafic rebondit
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120   # supprime maximum 1 pod toutes les 2 minutes

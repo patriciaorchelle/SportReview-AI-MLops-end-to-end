@@ -1,0 +1,60 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# service.yaml — Kubernetes Service
+#
+# Un Service expose les pods derrière une adresse stable.
+# Sans Service, les pods ont des IPs qui changent à chaque redémarrage.
+# Le Service agit comme un load balancer : il répartit le trafic
+# entre tous les pods sains du Deployment.
+#
+# Appliquer : kubectl apply -f k8s/service.yaml
+# Vérifier  : kubectl get services
+# ─────────────────────────────────────────────────────────────────────────────
+
+apiVersion: v1
+kind: Service
+
+metadata:
+  name: sportreview-api-service
+  namespace: default
+  labels:
+    app: sportreview-api
+
+spec:
+  # ── Type de Service ────────────────────────────────────────────────────────
+  # LoadBalancer : expose le service sur une IP externe
+  # (sur un vrai cluster cloud, ça provisionne un load balancer AWS/GCP)
+  # En local avec minikube : utilise "NodePort" à la place
+  type: LoadBalancer
+
+  # ── Sélecteur ─────────────────────────────────────────────────────────────
+  # Ce Service redirige le trafic vers tous les pods avec ce label
+  selector:
+    app: sportreview-api
+
+  # ── Ports ─────────────────────────────────────────────────────────────────
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80          # port externe (les clients se connectent sur le port 80)
+      targetPort: 8000  # port interne des containers (uvicorn écoute sur 8000)
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# Service interne pour MLflow (accessible seulement depuis le cluster)
+# ─────────────────────────────────────────────────────────────────────────────
+
+apiVersion: v1
+kind: Service
+
+metadata:
+  name: mlflow-service
+  namespace: default
+
+spec:
+  type: ClusterIP    # ClusterIP = accessible seulement à l'intérieur du cluster
+  selector:
+    app: mlflow
+
+  ports:
+    - port: 5000
+      targetPort: 5000

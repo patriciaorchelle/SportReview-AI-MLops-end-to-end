@@ -1,0 +1,190 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# ci.yml — Pipeline CI/CD GitHub Actions
+#
+# Se déclenche automatiquement à chaque push ou pull request sur main.
+#
+# 3 jobs enchaînés :
+#   1. test   → tests unitaires + qualité du code
+#   2. docker → build image + smoke test container
+#   3. deploy → pousse vers GitHub Container Registry
+#
+# Les jobs 2 et 3 ne tournent QUE si le job 1 (tests) a réussi.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: SportReview AI — CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+
+  # ─── JOB 1 : TESTS & QUALITÉ ───────────────────────────────────────────────
+  test:
+    name: Tests & Qualite du code
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Clone le repo sur la machine Ubuntu de GitHub
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      # 2. Installe Python 3.11 avec cache pip (accélère les runs suivants)
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      # 3. Installe toutes les dépendances
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # Installe sans pyspark (trop lourd pour la CI) et sans gradio
+          pip install scikit-learn pandas numpy xgboost gensim sentence-transformers \
+                      shap mlflow fastapi "uvicorn[standard]" pydantic \
+                      prometheus-client "evidently>=0.4.30,<0.5.0" requests \
+                      pytest pytest-cov httpx
+
+      # 4. Télécharge le dataset et crée les données
+      - name: Prepare data
+        run: |
+          python data/load_data.py --max_samples 5000   # petit dataset pour la CI
+          python spark/preprocess.py --no-spark         # pandas (pas de Java en CI)
+
+      # 5. Entraîne le modèle (mode rapide avec seulement TF-IDF + LR)
+      - name: Train model
+        run: |
+          python src/train.py --models tfidf_lr --fast
+
+      # 6. Lance tous les tests avec rapport de couverture
+      - name: Run tests
+        run: |
+          pytest tests/ -v --tb=short --cov=app --cov=src --cov-report=xml
+
+      # 7. Vérifie que la couverture globale est >= 25%
+      # Seuil basé sur la réalité du projet (résultats réels mai 2026 : 40%)
+      # app/ est bien couverte (74-100%) + tests unitaires pour promote_model
+      # et drift_detection. train.py est protégé par son exécution dans la CI
+      # (step "Train model" ci-dessus). Ce seuil garantit qu'on ne régresse pas —
+      # si du code est ajouté sans tests, la couverture descendra sous 40% et bloquera.
+      - name: Check coverage
+        run: |
+          pytest tests/ --cov=app --cov=src --cov-fail-under=40
+
+
+  # ─── JOB 2 : BUILD DOCKER ─────────────────────────────────────────────────
+  docker:
+    name: Build & Test Docker Image
+    runs-on: ubuntu-latest
+    needs: test   # ne démarre QUE si les tests passent
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      # Installe Python pour entraîner le modèle avant le build
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      # Prépare les données et le modèle (nécessaire avant docker build)
+      - name: Prepare model for Docker
+        run: |
+          pip install scikit-learn pandas numpy mlflow fastapi pydantic \
+                      "uvicorn[standard]" prometheus-client requests datasets
+          python data/load_data.py --max_samples 5000
+          python spark/preprocess.py --no-spark
+          python src/train.py --models tfidf_lr --fast
+
+      # Construit l'image Docker avec le hash du commit comme tag
+      # → chaque commit a son image unique (traçabilité parfaite)
+      - name: Build Docker image
+        run: |
+          docker build -t sportreview-ai:${{ github.sha }} .
+          docker build -t sportreview-ai:latest .
+
+      # Smoke test : lance le container et vérifie que l'API répond
+      - name: Smoke test container
+        run: |
+          # Lance le container en arrière-plan (-d = detached)
+          docker run -d -p 8000:8000 --name test-container sportreview-ai:latest
+
+          # Attend 15 secondes que uvicorn démarre et charge le modèle
+          sleep 15
+
+          # Vérifie que /health répond avec status 200
+          curl -f http://localhost:8000/health || exit 1
+
+          # Vérifie qu'une prédiction fonctionne
+          curl -f -X POST http://localhost:8000/predict \
+               -H "Content-Type: application/json" \
+               -d '{"text": "Excellent produit, je recommande !"}' || exit 1
+
+          # Arrête et supprime le container de test
+          docker stop test-container
+          docker rm test-container
+
+          echo "Smoke test Docker réussi !"
+
+
+  # ─── JOB 3 : PUSH VERS LE REGISTRY ────────────────────────────────────────
+  push-registry:
+    name: Push vers GitHub Container Registry
+    runs-on: ubuntu-latest
+    needs: docker   # ne démarre QUE si le build Docker a réussi
+    # Ne tourne que sur les push sur main (pas sur les pull requests)
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    # Permission de pousser vers GitHub Container Registry
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      # Connexion au GitHub Container Registry (ghcr.io)
+      # GITHUB_TOKEN est automatiquement disponible dans GitHub Actions
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Reconstruit et pousse avec les bons tags
+      - name: Set up Python and train model
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Prepare model
+        run: |
+          pip install scikit-learn pandas numpy mlflow fastapi pydantic \
+                      "uvicorn[standard]" prometheus-client requests datasets
+          python data/load_data.py --max_samples 5000
+          python spark/preprocess.py --no-spark
+          python src/train.py --models tfidf_lr --fast
+
+      - name: Build and push Docker image
+        run: |
+          # Nom complet de l'image dans le registry GitHub
+          IMAGE_NAME=ghcr.io/${{ github.repository_owner }}/sportreview-ai
+
+          # Build avec 2 tags : hash du commit + latest
+          docker build \
+            -t $IMAGE_NAME:${{ github.sha }} \
+            -t $IMAGE_NAME:latest \
+            .
+
+          # Pousse les deux tags vers le registry
+          docker push $IMAGE_NAME:${{ github.sha }}
+          docker push $IMAGE_NAME:latest
+
+          echo "Image poussée : $IMAGE_NAME:${{ github.sha }}"
+          echo "Image poussée : $IMAGE_NAME:latest"

@@ -1,0 +1,107 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# docker-compose.yml — SportReview AI
+#
+# Lance tous les services en une seule commande :
+#   docker-compose up
+#
+# Services inclus :
+#   - api          : l'API FastAPI (port 8000)
+#   - mlflow       : interface MLflow (port 5000)
+#   - prometheus   : collecte des métriques (port 9090)
+#   - grafana      : dashboard de monitoring (port 3000)
+#
+# URLs après démarrage :
+#   API Swagger    : http://localhost:8000/docs
+#   MLflow UI      : http://localhost:5000
+#   Prometheus     : http://localhost:9090
+#   Grafana        : http://localhost:3000  (admin/admin)
+# ─────────────────────────────────────────────────────────────────────────────
+
+version: "3.8"
+
+services:
+
+  # ── API FASTAPI ─────────────────────────────────────────────────────────────
+  api:
+    build: .                          # construit l'image depuis le Dockerfile local
+    container_name: sportreview-api
+    ports:
+      - "8000:8000"                   # port machine:port container
+    volumes:
+      - ./models:/app/models          # monte le dossier models en volume
+                                      # → permet de mettre à jour le modèle sans rebuilder l'image
+      - ./reports:/app/reports        # rapports de drift accessibles depuis le container
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000  # l'API peut logger dans MLflow
+    depends_on:
+      - mlflow                        # attend que MLflow soit prêt avant de démarrer
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped           # redémarre automatiquement si le container crashe
+
+  # ── MLFLOW ─────────────────────────────────────────────────────────────────
+  # NOTE : MLflow 3.x dans Docker force localhost-only par sécurité.
+  # Solution : lancer MLflow séparément dans un terminal avec : mlflow ui
+  # (accessible sur http://localhost:5000)
+  mlflow:
+    image: python:3.11-slim           # utilise une image Python de base
+    container_name: sportreview-mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlruns:/mlruns              # persiste les runs MLflow sur le disque
+      - ./models:/models
+    command: >
+      bash -c "pip install 'mlflow<3' --quiet &&
+               mlflow server
+               --host 0.0.0.0
+               --port 5000
+               --backend-store-uri /mlruns
+               --default-artifact-root /mlruns
+               --gunicorn-opts '--bind 0.0.0.0:5000'"
+    restart: unless-stopped
+
+  # ── PROMETHEUS ─────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest     # image officielle Prometheus
+    container_name: sportreview-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml  # config de scraping
+      - prometheus_data:/prometheus   # persiste les données de métriques
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+    depends_on:
+      - api                           # attend que l'API soit disponible
+    restart: unless-stopped
+
+  # ── GRAFANA ────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:latest     # image officielle Grafana
+    container_name: sportreview-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana  # persiste les dashboards et configs
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning  # datasources + dashboard config
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards  # fichiers JSON des dashboards
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin   # mot de passe admin (à changer en prod !)
+      - GF_USERS_ALLOW_SIGN_UP=false       # désactive l'inscription libre
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+# ── VOLUMES PERSISTANTS ─────────────────────────────────────────────────────
+# Ces volumes stockent les données en dehors des containers
+# → les données survivent même si on supprime et recrée les containers
+volumes:
+  prometheus_data:
+  grafana_data:

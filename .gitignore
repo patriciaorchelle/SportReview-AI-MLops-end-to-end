@@ -1,0 +1,53 @@
+# ─── Python ──────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# ─── Jupyter ─────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ─── MLflow ──────────────────────────────────────────────────────────────────
+# runs MLflow générés localement (trop volumineux pour git)
+mlruns/
+mlartifacts/
+# base SQLite MLflow générée localement
+mlflow.db
+
+# ─── Modèles ─────────────────────────────────────────────────────────────────
+# fichiers modèles gérés par DVC, pas git
+models/
+*.pkl
+*.joblib
+
+# ─── Données ─────────────────────────────────────────────────────────────────
+# données brutes et traitées (générées par le pipeline)
+data/raw/
+data/processed/
+*.csv
+*.parquet
+*.json.gz
+
+# ─── Rapports ────────────────────────────────────────────────────────────────
+reports/
+*.html
+
+# ─── Docker ──────────────────────────────────────────────────────────────────
+.docker/
+
+# ─── Divers ──────────────────────────────────────────────────────────────────
+.DS_Store
+.env
+*.log
+.pytest_cache/
+.coverage
+htmlcov/
+classification_report.txt

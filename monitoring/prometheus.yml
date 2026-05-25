@@ -1,0 +1,37 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# prometheus.yml — Configuration de Prometheus
+#
+# Prometheus scrape (collecte) les métriques de l'API toutes les 15 secondes
+# en appelant l'endpoint GET /metrics.
+#
+# Ces métriques sont ensuite visualisées dans Grafana.
+# ─────────────────────────────────────────────────────────────────────────────
+
+global:
+  # Intervalle de collecte par défaut : toutes les 15 secondes
+  scrape_interval: 15s
+
+  # Délai d'évaluation des règles d'alerte
+  evaluation_interval: 15s
+
+  # Labels ajoutés à toutes les métriques collectées
+  external_labels:
+    monitor: "sportreview-ai"
+    environment: "local"
+
+# ── CIBLES DE COLLECTE ────────────────────────────────────────────────────────
+scrape_configs:
+
+  # Prometheus se monitore lui-même
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Notre API FastAPI
+  - job_name: "sportreview-api"
+    static_configs:
+      # "api:8000" fonctionne avec docker-compose (nom du service = hostname)
+      # En local sans Docker : utilise "localhost:8000"
+      - targets: ["api:8000"]
+    metrics_path: "/metrics"     # endpoint Prometheus dans FastAPI
+    scrape_interval: 15s         # collecte toutes les 15 secondes

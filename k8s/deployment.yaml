@@ -1,0 +1,117 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# deployment.yaml — Kubernetes Deployment
+#
+# Un Deployment gère le cycle de vie des pods (containers) en production.
+# Il garantit que le nombre voulu de replicas tourne en permanence.
+#
+# Fonctionnalités :
+# - 3 replicas de l'API (haute disponibilité)
+# - Rolling update : déploiement sans interruption de service
+# - Liveness probe : redémarre les pods qui ne répondent plus
+# - Readiness probe : n'envoie du trafic qu'aux pods prêts
+#
+# Appliquer : kubectl apply -f k8s/deployment.yaml
+# Vérifier  : kubectl get pods
+# ─────────────────────────────────────────────────────────────────────────────
+
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: sportreview-api          # nom du Deployment dans Kubernetes
+  namespace: default
+  labels:
+    app: sportreview-api
+    version: "1.0"
+
+spec:
+  # ── Nombre de replicas ──────────────────────────────────────────────────────
+  # 3 instances de l'API tournent en parallèle
+  # → si un pod crashe, les 2 autres continuent à répondre
+  # → le trafic est réparti entre les 3 pods (load balancing)
+  replicas: 3
+
+  # ── Sélecteur ────────────────────────────────────────────────────────────────
+  # Le Deployment gère tous les pods avec le label app=sportreview-api
+  selector:
+    matchLabels:
+      app: sportreview-api
+
+  # ── Stratégie de déploiement ──────────────────────────────────────────────
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1    # maximum 1 pod hors service pendant la mise à jour
+      maxSurge: 1          # crée 1 pod supplémentaire pendant la mise à jour
+      # → pendant un update v1→v2 : on a toujours au moins 2 pods v1 actifs
+      # → pas d'interruption de service
+
+  # ── Template des pods ────────────────────────────────────────────────────
+  template:
+    metadata:
+      labels:
+        app: sportreview-api
+
+    spec:
+      containers:
+        - name: sportreview-api
+          # Image Docker depuis le registry (remplacer par ton registry)
+          image: ghcr.io/TON_USERNAME/sportreview-ai:latest
+          imagePullPolicy: Always   # récupère toujours la dernière image
+
+          ports:
+            - containerPort: 8000   # port exposé par uvicorn
+
+          # ── Variables d'environnement ───────────────────────────────────
+          env:
+            - name: API_PORT
+              value: "8000"
+            - name: MLFLOW_TRACKING_URI
+              value: "http://mlflow-service:5000"
+          # Valeurs sensibles depuis un Secret Kubernetes (jamais en clair ici)
+          # envFrom:
+          #   - secretRef:
+          #       name: sportreview-secrets
+
+          # ── Ressources CPU/mémoire ──────────────────────────────────────
+          resources:
+            requests:
+              cpu: "250m"       # 0.25 vCPU minimum garanti
+              memory: "512Mi"   # 512MB RAM minimum
+            limits:
+              cpu: "1000m"      # maximum 1 vCPU
+              memory: "2Gi"     # maximum 2GB RAM (pour charger les embeddings SBERT)
+
+          # ── Liveness Probe ───────────────────────────────────────────────
+          # Kubernetes appelle /health toutes les 30s
+          # Si 3 échecs consécutifs → Kubernetes redémarre le pod
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30   # attend 30s au démarrage (uvicorn + chargement modèle)
+            periodSeconds: 30         # vérifie toutes les 30 secondes
+            failureThreshold: 3       # 3 échecs → redémarrage
+
+          # ── Readiness Probe ──────────────────────────────────────────────
+          # Le pod ne reçoit du trafic QUE si /health répond OK
+          # → évite d'envoyer des requêtes à un pod qui démarre encore
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+
+          # ── Volume pour les modèles ──────────────────────────────────────
+          volumeMounts:
+            - name: models-volume
+              mountPath: /app/models   # monte les modèles dans le container
+
+      # ── Volumes ────────────────────────────────────────────────────────────
+      volumes:
+        - name: models-volume
+          # En production : utiliser un PersistentVolumeClaim ou un bucket S3
+          # Pour le dev : configMap ou volume vide (les modèles sont dans l'image)
+          emptyDir: {}

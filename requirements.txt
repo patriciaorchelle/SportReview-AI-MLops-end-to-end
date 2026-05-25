@@ -1,0 +1,77 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# SportReview AI — Dépendances Python
+# Compatible Python 3.11 (recommandé pour les librairies ML lourdes)
+#
+# COMPATIBILITÉ DES VERSIONS — IMPORTANT
+# ═══════════════════════════════════════
+# Il y a une contrainte de version stricte :
+#
+# 1. datasets < 3.0  →  obligatoire pour Amazon Reviews 2023 (script personnalisé)
+#    pip install "datasets<3.0" --force-reinstall
+#
+# Versions installées et validées (mai 2026) :
+#   mlflow 3.12.0 + pandas 2.3.3 + pyarrow 23.0.1  →  compatibles ✓
+#
+# Pour installer toutes les dépendances d'un coup :
+#    pip install -r requirements.txt
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── DATA ─────────────────────────────────────────────────────────────────────
+# IMPORTANT : datasets doit être < 3.0 car le dataset Amazon Reviews utilise
+# un script de chargement personnalisé (trust_remote_code), supprimé en v3.0+
+# Si tu as une erreur "Dataset scripts are no longer supported" :
+#   pip install "datasets<3.0" --force-reinstall
+datasets>=2.20.0,<3.0     # HuggingFace datasets — téléchargement Amazon Reviews
+
+pandas>=2.2.0             # manipulation des données tabulaires (2.3.x validé)
+
+numpy>=2.3.0              # calcul numérique (2.3.x validé — ne pas downgrader pour evidently)
+
+pyarrow>=16.0.0           # format Parquet pour Spark + sérialisation MLflow (23.x validé)
+
+# ── SPARK ─────────────────────────────────────────────────────────────────────
+pyspark>=3.5.0,<4.0       # preprocessing distribué (requiert Java 11+ ; PySpark 4.x requiert Java 17+)
+
+# ── ML — VECTORISATION ───────────────────────────────────────────────────────
+scikit-learn>=1.5.0       # TF-IDF, SVM, Logistic Regression, pipelines
+matplotlib>=3.8.0         # génération des graphiques (matrice de confusion)
+seaborn>=0.13.0           # heatmap pour la matrice de confusion (MLflow artifact)
+gensim>=4.3.0             # Word2Vec
+sentence-transformers>=3.0.0  # Sentence-BERT (all-MiniLM-L6-v2)
+
+# ── ML — MODÈLES ─────────────────────────────────────────────────────────────
+xgboost>=2.0.0            # XGBoost classifier
+imbalanced-learn>=0.12.0  # SMOTE / ADASYN pour rééquilibrer les classes
+torch>=2.0.0              # PyTorch — requis pour DistilBERT fine-tuning
+transformers>=4.40.0      # HuggingFace Transformers — DistilBERT, tokenizer
+
+# ── EXPLICABILITÉ ────────────────────────────────────────────────────────────
+shap>=0.45.0              # explication des prédictions (pourquoi SPAM ?)
+
+# ── MLFLOW ───────────────────────────────────────────────────────────────────
+# MLflow 3.x est compatible avec pandas 2.3.x et pyarrow 23.x (validé mai 2026)
+mlflow>=2.15.0            # tracking expériences + Model Registry (3.12.x validé)
+
+# ── API ──────────────────────────────────────────────────────────────────────
+fastapi>=0.115.0          # framework API REST
+uvicorn[standard]>=0.30.0 # serveur ASGI pour FastAPI
+pydantic>=2.9.0           # validation des données d'entrée/sortie
+prometheus-client>=0.20.0 # exposition des métriques pour Prometheus
+
+# ── DEMO ─────────────────────────────────────────────────────────────────────
+gradio>=4.40.0            # interface web interactive pour démo publique
+
+# ── MONITORING ───────────────────────────────────────────────────────────────
+# IMPORTANT — sur Windows, installer avec : pip install "evidently>=0.4.30,<0.5.0" --no-deps
+# (évite la tentative de downgrade numpy qui nécessite un compilateur C)
+# Sur Linux/Docker : pip install "evidently>=0.4.30,<0.5.0" fonctionne normalement
+evidently>=0.4.30,<0.5.0  # drift detection — API 0.5+ a cassé les imports (Report, metrics)
+
+# ── DVC ──────────────────────────────────────────────────────────────────────
+dvc>=3.50.0               # versioning des données (comme git pour les fichiers)
+
+# ── TESTS ────────────────────────────────────────────────────────────────────
+pytest>=8.3.0             # framework de tests
+httpx>=0.27.0             # client HTTP pour tester FastAPI
+pytest-cov>=5.0.0         # mesure de la couverture de code
+requests>=2.32.0          # requêtes HTTP dans les tests

@@ -1,0 +1,45 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# dashboard.yml — Configuration du chargement automatique des dashboards
+#
+# Ce fichier dit à Grafana où trouver les fichiers JSON de dashboards.
+# Grafana scanne le dossier spécifié et charge tous les .json qu'il trouve.
+#
+# Sans ce fichier, tu devrais importer les dashboards manuellement via
+# l'interface Grafana à chaque redémarrage. Avec ce fichier + le JSON du
+# dashboard, tout se charge automatiquement au démarrage de Grafana.
+#
+# Emplacement attendu dans le container Grafana :
+#   /etc/grafana/provisioning/dashboards/dashboard.yml
+# ─────────────────────────────────────────────────────────────────────────────
+
+apiVersion: 1
+
+providers:
+  - name: "SportReview AI Dashboards"
+
+    # Type "file" = Grafana lit les dashboards depuis des fichiers JSON sur disque
+    # (alternative : "database" pour stocker en base de données)
+    type: file
+
+    # disableDeletion = empêche de supprimer les dashboards depuis l'interface
+    # true = protection contre les suppressions accidentelles
+    disableDeletion: false
+
+    # updateIntervalSeconds = Grafana vérifie toutes les 10 secondes si les fichiers
+    # JSON ont changé et recharge les dashboards si c'est le cas
+    # Utile en développement pour voir les changements sans redémarrer Grafana
+    updateIntervalSeconds: 10
+
+    # allowUiUpdates = autorise la modification des dashboards depuis l'interface
+    # Les changements seront sauvegardés en base de données (pas dans le fichier JSON)
+    allowUiUpdates: true
+
+    options:
+      # Dossier où Grafana cherche les fichiers JSON de dashboards
+      # Dans le container Docker, ce chemin correspond au volume monté
+      # depuis monitoring/grafana/dashboards/ sur la machine hôte
+      path: /var/lib/grafana/dashboards
+
+      # foldersFromFilesStructure = crée des dossiers Grafana basés sur
+      # la structure des sous-dossiers (utile si on a plusieurs dashboards)
+      foldersFromFilesStructure: true
