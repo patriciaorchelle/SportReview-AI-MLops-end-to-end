@@ -63,18 +63,16 @@ jobs:
       # 6. Lance tous les tests avec rapport de couverture
       - name: Run tests
         run: |
-          pytest tests/ -v --tb=short --cov=app --cov=src --cov-report=xml \
-            --cov-omit=src/train.py
+          pytest tests/ -v --tb=short --cov=app --cov=src --cov-report=xml --cov-omit=src/train.py
 
       # 7. Vérifie que la couverture globale est >= 40%
       # train.py est exclu de la mesure : c'est un script d'entraînement (431 lignes),
       # pas une librairie — il est testé indirectement via le step "Train model" ci-dessus.
-      # Sans exclusion : 37% Github actions (train.py à 0% tire tout vers le bas).
+      # Sans exclusion : 37% (train.py à 0% tire tout vers le bas).
       # Avec exclusion de train.py uniquement : ~60% (app/ et src/ bien couverts).
       - name: Check coverage
         run: |
-          pytest tests/ --cov=app --cov=src --cov-fail-under=40 \
-            --cov-omit=src/train.py
+          pytest tests/ --cov=app --cov=src --cov-fail-under=40 --cov-omit=src/train.py
 
 
   # ─── JOB 2 : BUILD DOCKER ─────────────────────────────────────────────────
