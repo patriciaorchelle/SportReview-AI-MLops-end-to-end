@@ -224,10 +224,13 @@ def load_amazon_reviews(max_samples: int = None) -> pd.DataFrame:
     # ── Limite le nombre d'exemples ──────────────────────────────────────────
     if max_samples and len(df) > max_samples:
         # Échantillonnage stratifié par note pour garder la distribution
-        df = df.groupby("rating", group_keys=False).apply(
-            lambda x: x.sample(min(len(x), max_samples // 5), random_state=42),
-            include_groups=False
-        ).reset_index(drop=True)
+        # Note : on utilise une boucle explicite pour éviter les incompatibilités
+        # de pandas avec include_groups (qui supprime la colonne 'rating' du résultat)
+        samples = []
+        for _, group in df.groupby("rating"):
+            n = min(len(group), max_samples // 5)
+            samples.append(group.sample(n, random_state=42))
+        df = pd.concat(samples).reset_index(drop=True)
         print(f"Dataset reduit a {len(df)} exemples (echantillonnage stratifie)")
 
     # ── Assignation des labels ────────────────────────────────────────────────
