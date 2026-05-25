@@ -21,11 +21,46 @@ Démarrage :
 import json
 import os
 import pickle
+import re
 import sys
 import time
 import uuid
 from datetime import datetime
 from typing import List
+
+# ─── DÉTECTION SPAM PAR RÈGLES ────────────────────────────────────────────────
+# Même logique que load_data.py pour cohérence entre labellisation et inférence.
+# Ce pré-filtre court-circuite le modèle ML sur les cas évidents,
+# ce qui rend la détection fiable même avec un petit dataset d'entraînement.
+_SPAM_PATTERNS = [
+    r"http[s]?://",      # URL complète
+    r"www\.",            # site web
+    r"click here",       # appel à l'action (EN)
+    r"cliquez ici",      # appel à l'action (FR)
+    r"buy now",          # achetez maintenant
+    r"discount code",    # code promo
+    r"promo code",       # code promo
+    r"free shipping",    # livraison gratuite
+    r"limited offer",    # offre limitée
+    r"contact me",       # contact direct
+    r"message me",       # message privé
+    r"\$\d+",            # montant en dollars
+    r"!!{3,}",           # 3 points d'exclamation ou plus
+    r"[A-Z]{10,}",       # 10 majuscules consécutives
+]
+_SPAM_REGEX = re.compile("|".join(_SPAM_PATTERNS), re.IGNORECASE)
+
+
+def _is_spam_by_rules(text: str, verified: bool = True) -> bool:
+    """
+    Détecte le spam par règles — identique à load_data.py.
+    Retourne True si l'avis est du spam, False sinon.
+    """
+    if not verified and _SPAM_REGEX.search(text):
+        return True
+    if not verified and len(text.strip()) < 20:
+        return True
+    return False
 
 import numpy as np
 from fastapi import FastAPI, HTTPException, Query
@@ -242,18 +277,41 @@ def compute_shap_explanation(text: str, label: str) -> SHAPExplanation:
         return SHAPExplanation(top_positive_words={}, top_negative_words={})
 
 
-def make_prediction(text: str, include_explanation: bool = False) -> PredictionOutput:
+def make_prediction(text: str, verified_purchase: bool = True, include_explanation: bool = False) -> PredictionOutput:
     """
     Effectue une prédiction sur un texte et retourne le résultat structuré.
 
+    Le pré-filtre règle-based est appliqué en premier pour les cas de spam évidents.
+    Cela garantit une détection fiable indépendamment de la qualité du modèle ML.
+
     Args:
         text               : texte de l'avis à classifier
+        verified_purchase  : achat vérifié ? (améliore la détection spam)
         include_explanation: si True, calcule l'explication SHAP
 
     Returns:
         PredictionOutput avec label, confiance, probabilités
     """
-    # Prédiction du label
+    # ── Pré-filtre spam par règles (avant le modèle ML) ───────────────────────
+    # Même logique que load_data.py : cohérence garantie entre données et inférence
+    if _is_spam_by_rules(text, verified=verified_purchase):
+        label = "SPAM"
+        confidence = 1.0
+        proba_dict = {cls: 0.0 for cls in CLASSES}
+        if "SPAM" in proba_dict:
+            proba_dict["SPAM"] = 1.0
+        record_prediction(label, confidence, CONFIDENCE_THRESHOLD)
+        return PredictionOutput(
+            text=text,
+            label=label,
+            confidence=1.0,
+            probabilities=proba_dict,
+            is_reliable=True,
+            explanation=None,
+            timestamp=datetime.utcnow().isoformat(),
+        )
+
+    # ── Prédiction ML (cas non-spam) ──────────────────────────────────────────
     label = pipeline.predict([text])[0]
 
     # Probabilités pour toutes les classes
@@ -354,7 +412,11 @@ def predict(
     """
     with RequestTimer() as timer:
         try:
-            result = make_prediction(review.text, include_explanation=explain)
+            result = make_prediction(
+                review.text,
+                verified_purchase=review.verified_purchase,
+                include_explanation=explain,
+            )
         except Exception as e:
             ERROR_COUNT.labels(error_type="model_error").inc()
             raise HTTPException(

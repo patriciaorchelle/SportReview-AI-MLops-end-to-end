@@ -84,9 +84,10 @@ class TestPredictEndpoint:
         assert data["label"] == "POSITIF"
 
     def test_predict_spam_review(self):
-        """Un avis spam doit être classifié SPAM."""
+        """Un avis spam (achat non vérifié + patterns spam) doit être classifié SPAM."""
         response = client.post("/predict", json={
-            "text": "PROMO INCROYABLE cliquez maintenant sur notre site web !!!!"
+            "text": "PROMO INCROYABLE cliquez maintenant sur notre site web !!!!",
+            "verified_purchase": False   # achat non vérifié = critère spam activé
         })
         assert response.status_code == 200
         data = response.json()
